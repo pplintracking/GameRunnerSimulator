@@ -10,9 +10,14 @@ static class SelfTest
     public static int Catalog(string outFile)
     {
         var sb = new StringBuilder();
+        void Step(string m) { sb.AppendLine(m); File.WriteAllText(outFile, sb.ToString()); }
         try
         {
-            var r = Core.Catalog.FetchAsync(CancellationToken.None).GetAwaiter().GetResult();
+            Step($"inicio {DateTime.Now:HH:mm:ss} versao={AppInfo.VersionText} exe={AppInfo.ExePath}");
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(90));
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            var r = Core.Catalog.FetchAsync(cts.Token).GetAwaiter().GetResult();
+            Step($"baixou em {sw.ElapsedMilliseconds} ms");
             sb.AppendLine($"jogos={r.Games.Count}");
             sb.AppendLine($"exes={r.Games.Sum(g => g.Exes.Count)} com_pasta={r.Games.Sum(g => g.Exes.Count(e => e.Name.Contains('/')))}");
             var ow = r.Games.FirstOrDefault(g => g.Id == OverwatchId);

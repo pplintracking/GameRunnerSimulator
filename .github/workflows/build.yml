@@ -42,11 +42,15 @@ jobs:
           $exe = Get-Item out/GameRunnerSimulator.exe
           "{0:N1} MB" -f ($exe.Length / 1MB) | Tee-Object prova/tamanho.txt
 
+      - name: Sonda — o runner alcança a API do Discord?
+        run: |
+          curl.exe -s -o NUL --compressed -m 60 -A "GameRunnerSimulator/0.0.0" -w "discord: %{http_code} %{size_download}B %{time_total}s`n" https://discord.com/api/v9/applications/detectable
+
       - name: Autoteste — lista do Discord, cache e busca
         run: |
           . ./tools/ci.ps1
-          $code = Invoke-App out/GameRunnerSimulator.exe @('--selftest-catalog', "$PWD/prova/catalogo.txt") 180
-          Get-Content prova/catalogo.txt
+          try { $code = Invoke-App out/GameRunnerSimulator.exe @('--selftest-catalog', "$PWD/prova/catalogo.txt") 150 }
+          finally { Get-Content prova/catalogo.txt -ErrorAction SilentlyContinue }
           if ($code -ne 0) { throw "autoteste do catálogo saiu $code" }
 
       - name: Autoteste — versão gravada no .exe

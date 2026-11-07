@@ -89,8 +89,12 @@ public static class Catalog
     }
 
     /// <summary>Baixa a lista atual do Discord e guarda a versão enxuta.</summary>
-    public static async Task<CatalogResult> FetchAsync(CancellationToken ct)
+    public static async Task<CatalogResult> FetchAsync(CancellationToken outer)
     {
+        // o Timeout do HttpClient não cobre o corpo lido em stream: prazo próprio para o pedido inteiro
+        using var limit = CancellationTokenSource.CreateLinkedTokenSource(outer);
+        limit.CancelAfter(TimeSpan.FromSeconds(90));
+        var ct = limit.Token;
         using var resp = await AppInfo.Http.GetAsync(Url, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false);
         resp.EnsureSuccessStatusCode();
         await using var s = await resp.Content.ReadAsStreamAsync(ct).ConfigureAwait(false);
