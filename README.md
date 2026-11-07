@@ -1,146 +1,67 @@
-# GameRunnerSimulator
-CompletarQuests – Simulando Jogos no Discord
+# GameRunner Simulator
 
-Pequeno app em C# (.NET 10) que simula jogos rodando no seu PC para o Discord, usando o arquivo oficial `detectable.json` como base.
+Faz o Discord achar que um jogo está aberto no seu PC, para completar missões (Quests) que pedem
+"jogue X por 15 minutos" sem instalar o jogo.
 
-Você escolhe um jogo na lista, o programa copia o próprio executável com o nome do jogo (por ex. `overwatch.exe`) e mantém esse processo rodando, para o Discord detectar como se fosse o jogo real.
+## Baixar
 
----
+**[GameRunnerSimulator.exe](https://github.com/pplintracking/GameRunnerSimulator/releases/latest/download/GameRunnerSimulator.exe)**
+— um arquivo só, para Windows 10/11 64 bits. Não precisa instalar nada, nem o .NET.
 
-## Download (binário pronto)
+Na primeira vez o Windows pode mostrar "O Windows protegeu o computador" (o .exe não tem assinatura
+paga). Clique em **Mais informações → Executar assim mesmo**.
 
-Na aba **Releases** deste repositório, baixe o arquivo:
+## Como usar
 
-- `executavelnomeavel-DOTNET10-runtime.zip`  
-  *(ou o nome mais novo que estiver lá, ex: `GameRunnerSimulator-win-x64-dotnet10-runtime.zip`)*
+1. Abra o `GameRunnerSimulator.exe` e busque o jogo da missão, pelo nome ou pelo `.exe`.
+2. Clique em **Simular** (ou dê Enter). Abre uma janelinha com o nome e o ícone do jogo.
+3. Deixe essa janelinha aberta (pode minimizar) até a missão completar no Discord.
 
-Extraia todo o conteúdo do `.zip` para uma pasta qualquer, por exemplo:
+O app já escolhe o executável certo; se o jogo tiver mais de um, dá para trocar antes de simular.
+Dá para simular vários jogos ao mesmo tempo, e o painel "Simulações ativas" mostra o tempo de
+cada um com o botão **Parar**.
 
-```text
-C:\Users\SEU_USUARIO\Downloads\GameRunnerSimulator\
+Atalhos: `Ctrl+F` busca · `↑` `↓` navegam · `Enter` simula · `Esc` limpa a busca.
+
+## Atualiza sozinho
+
+- **Lista de jogos:** baixada do próprio Discord toda vez que o app abre
+  (`discord.com/api/v9/applications/detectable`, hoje com mais de 10 mil jogos de Windows).
+  Sem internet, usa a última lista salva.
+- **O próprio app:** ao abrir e a cada 6 horas, procura versão nova aqui nos Releases, baixa,
+  confere o tamanho e o sha256 e se troca. O rodapé avisa "instalada · Reiniciar agora".
+  Se a pasta do .exe não aceitar escrita, ele só mostra o link para baixar.
+
+## Como funciona
+
+A lista do Discord traz, para cada jogo, o executável com a pasta onde ele fica (por exemplo
+`_retail_/wow.exe`). Ao simular, o app cria um atalho físico (hard link) dele mesmo com esse nome e essa pasta em
+`%LOCALAPPDATA%\GameRunnerSimulator\sims\` e abre esse processo. Quando a simulação para, a pasta
+é apagada; se algo ficar para trás, o app limpa na próxima vez que abrir.
+
+Em `%LOCALAPPDATA%\GameRunnerSimulator\` ficam também a lista de jogos (`games.json`) e os ícones.
+Para desinstalar, apague o .exe e essa pasta.
+
+> Use por sua conta. Simular jogo para ganhar recompensa pode ir contra os Termos do Discord.
+
+## Para quem quer compilar
+
+Precisa do [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0).
+
+```powershell
+dotnet publish -c Release -o out
 ```
 
-Dentro da pasta extraída você terá, por exemplo:
+Sai `out\GameRunnerSimulator.exe` (versão 0.0.0, que não se atualiza sozinha). Para publicar
+uma versão nova, crie uma tag anotada; o GitHub Actions compila, testa e cria o Release, e os
+.exe já instalados se atualizam a partir dele:
 
-- `executavelnomeavel.exe`
-- `executavelnomeavel.dll`
-- `executavelnomeavel.deps.json`
-- `executavelnomeavel.runtimeconfig.json`
-- `detectable.json`
-
-> **Importante:** o arquivo `detectable.json` **deve ficar na mesma pasta do `.exe`**.  
-> Se você mover o `.exe` para outra pasta, mova o `detectable.json` junto.
-
----
-
-## Como usar (binário)
-
-1. Extraia o `.zip` em uma pasta.
-2. Deixe todos os arquivos juntos (`executavelnomeavel.exe` + `.dll` + `.json` + `detectable.json`).
-3. Dê **duplo clique** em `executavelnomeavel.exe`.
-4. Na janela que abrir:
-   - Use a caixa de busca para procurar o jogo (ex: `Overwatch`);
-   - Selecione o jogo na lista da esquerda;
-   - Selecione o executável correspondente na lista da direita (ex: `overwatch.exe`);
-   - Clique em **Iniciar fake**.
-5. O programa vai:
-   - Copiar o próprio `.exe` com o nome do executável escolhido (ex: `overwatch.exe`);
-   - Iniciar um novo processo com esse nome;
-   - Abrir uma janelinha “Simulando: overwatch.exe”.
-
-Enquanto essa janelinha estiver aberta, o Discord deve enxergar esse processo como se fosse o jogo.
-
----
-
-## Requisitos
-
-Para rodar o binário (versão *runtime*):
-
-- Windows 64 bits;
-- .NET Desktop Runtime 10 (x64) instalado.
-
-Se o runtime não estiver instalado, o Windows normalmente abre uma tela pedindo para instalar.
-
----
-
-## Como compilar a partir do código-fonte
-
-Se você quiser gerar o seu próprio `.exe` a partir dos arquivos `Program.cs` e `.csproj` deste repositório, pode seguir este passo a passo simples.
-
-### 1. Criar pasta base do projeto
-
-No PowerShell ou CMD:
-
-```ps
-mkdir GameRunnerSimulator
-cd GameRunnerSimulator
-dotnet new console
+```powershell
+git tag -a v2.1.0 -m "o que mudou"
+git push origin v2.1.0
 ```
 
-Isso vai criar um projeto console padrão dentro da pasta `GameRunnerSimulator`.
+## Créditos
 
-### 2. Substituir os arquivos do template
-
-Na pasta do projeto recém-criada:
-
-- Apague o `Program.cs` gerado automaticamente;
-- Apague o `.csproj` gerado automaticamente;
-- Copie para essa pasta:
-  - O `Program.cs` deste repositório (o da GUI);
-  - O `.csproj` deste repositório (por exemplo `executavelnomeavel.csproj` ou o nome que você estiver usando).
-
-Ou seja, **substituir os arquivos**:
-
-```text
-Program.cs
-executavelnomeavel.csproj   (ou GameRunnerSimulator.csproj, se você renomear)
-```
-
-pelos que estão aqui no GitHub.
-
-### 3. Compilar / publicar
-
-Ainda dentro da pasta do projeto:
-
-```ps
-dotnet publish -c Release
-```
-
-Os arquivos compilados/publish vão aparecer em algo como:
-
-```text
-bin\Release\net10.0\win-x64\publish\
-```
-
-Nessa pasta você terá:
-
-- o `.exe` (executável),
-- `.dll`,
-- `.deps.json`,
-- `.runtimeconfig.json`.
-
-Copie também o `detectable.json` para essa mesma pasta de `publish` (ou para onde você quiser rodar o `.exe`, sempre lado a lado).
-
-Se quiser, você pode zipar o conteúdo de `publish` para criar um novo `.zip` de release.
-
----
-
-## Como funciona (resumo técnico)
-
-- App em C# (.NET 10, Windows Forms).
-- Em tempo de execução:
-  - Descobre o próprio caminho (`Process.GetCurrentProcess().MainModule!.FileName`);
-  - Lê `detectable.json` da **mesma pasta** do `.exe`;
-  - Filtra entradas com executáveis `win32`;
-  - Exibe:
-    - Lista de jogos,
-    - Lista de executáveis por jogo.
-- Quando clica em **Iniciar fake**:
-  - Pega o `name` do executável (por ex. `"overwatch.exe"` ou `"_beta_/wow-64.exe"`);
-  - Normaliza para um nome de arquivo (pega só o nome final, tipo `wow-64.exe`);
-  - Copia o próprio `.exe` com esse nome;
-  - Sobe um processo novo passando `--child`;
-  - O processo filho abre uma janelinha e fica rodando (mantendo o processo ativo com aquele nome).
-
----
-
+Fork de [gustavocs97/GameRunnerSimulator](https://github.com/gustavocs97/GameRunnerSimulator).
+Ícones dos jogos: CDN do Discord.

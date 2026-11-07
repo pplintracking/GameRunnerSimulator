@@ -1,0 +1,114 @@
+name: build
+
+# Compila o .exe único, testa a lista do Discord, tira o print do README e,
+# numa tag vX.Y.Z, publica a versão — que os .exe já instalados baixam sozinhos.
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Versão
+        id: ver
+        run: |
+          $v = '0.0.0'
+          if ($env:GITHUB_REF -like 'refs/tags/v*') { $v = $env:GITHUB_REF_NAME.TrimStart('v') }
+          "version=$v" >> $env:GITHUB_OUTPUT
+          "Versão: $v"
+
+      - name: Publicar o .exe
+        run: |
+          dotnet publish GameRunnerSimulator.csproj -c Release -p:Version=${{ steps.ver.outputs.version }} -o out
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          New-Item -ItemType Directory -Force prova | Out-Null
+          $exe = Get-Item out/GameRunnerSimulator.exe
+          "{0:N1} MB" -f ($exe.Length / 1MB) | Tee-Object prova/tamanho.txt
+
+      - name: Autoteste — lista do Discord, cache e busca
+        run: |
+          . ./tools/ci.ps1
+          $code = Invoke-App out/GameRunnerSimulator.exe @('--selftest-catalog', "$PWD/prova/catalogo.txt") 180
+          Get-Content prova/catalogo.txt
+          if ($code -ne 0) { throw "autoteste do catálogo saiu $code" }
+
+      - name: Autoteste — versão gravada no .exe
+        run: |
+          . ./tools/ci.ps1
+          $code = Invoke-App out/GameRunnerSimulator.exe @('--version-file', "$PWD/prova/versao.txt") 30
+          $got = Get-Content prova/versao.txt
+          "versão no .exe: $got"
+          if ($code -ne 0 -or $got -ne '${{ steps.ver.outputs.version }}') { throw "versão errada: $got" }
+
+      - name: Prints da janela e da simulação
+        run: |
+          . ./tools/ci.ps1
+          $code = Invoke-App out/GameRunnerSimulator.exe @('--screenshot', "$PWD/prova/janela.png") 180
+          if ($code -ne 0) { Get-Content prova/janela.png.erro.txt -ErrorAction SilentlyContinue; throw "print da janela saiu $code" }
+          $cat = Get-Content "$env:LOCALAPPDATA/GameRunnerSimulator/games.json" -Raw | ConvertFrom-Json
+          $ow = $cat.Games | Where-Object { $_.Id -eq '356875221078245376' } | Select-Object -First 1
+          $args2 = @('--child', '--id', $ow.Id, '--name', $ow.Name, '--shot', "$PWD/prova/simulacao.png")
+          if ($ow.Icon) { $args2 += @('--icon', $ow.Icon) }
+          Invoke-App out/GameRunnerSimulator.exe $args2 60 | Out-Null
+          if (-not (Test-Path prova/simulacao.png)) { Get-Content prova/simulacao.png.erro.txt -ErrorAction SilentlyContinue; throw 'sem print da simulação' }
+          Get-ChildItem prova | Format-Table Name, Length
+          $left = Get-ChildItem "$env:LOCALAPPDATA/GameRunnerSimulator/sims" -Recurse -File -ErrorAction SilentlyContinue
+          "cópias que sobraram em sims: $(@($left).Count)"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: GameRunnerSimulator-${{ steps.ver.outputs.version }}
+          path: |
+            out/GameRunnerSimulator.exe
+            prova/
+
+      - name: Publicar a versão
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create $env:GITHUB_REF_NAME out/GameRunnerSimulator.exe --title "GameRunner Simulator $env:GITHUB_REF_NAME" --notes-from-tag --verify-tag
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+
+      # Controle positivo da atualização: um .exe 0.0.1 tem de baixar a versão publicada e se trocar;
+      # e o .exe da própria versão tem de dizer «já é a mais nova» (saída 10).
+      - name: Autoteste — atualização automática
+        run: |
+          . ./tools/ci.ps1
+          dotnet publish GameRunnerSimulator.csproj -c Release -p:Version=0.0.1 -o velho
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          $code = Invoke-App velho/GameRunnerSimulator.exe @('--selftest-update', "$PWD/prova/atualizacao.txt") 300
+          Get-Content prova/atualizacao.txt
+          $isTag = $env:GITHUB_REF -like 'refs/tags/v*'
+          if ($code -eq 0) {
+            Invoke-App velho/GameRunnerSimulator.exe @('--version-file', "$PWD/prova/versao-depois.txt") 30 | Out-Null
+            $after = Get-Content prova/versao-depois.txt
+            "0.0.1 virou: $after"
+            Get-ChildItem velho -Filter 'GameRunnerSimulator.exe*' | Format-Table Name, Length
+            if ($isTag -and $after -ne '${{ steps.ver.outputs.version }}') { throw "atualizou para $after" }
+            if ($after -eq '0.0.1') { throw 'disse que atualizou mas o .exe é o mesmo' }
+          } elseif ($code -eq 10 -and -not $isTag) {
+            'ainda não há versão publicada (ou é a mesma): nada a baixar'
+          } else { throw "atualização saiu $code" }
+          if ($isTag) {
+            $code = Invoke-App out/GameRunnerSimulator.exe @('--selftest-update', "$PWD/prova/atualizacao-mesma.txt") 120
+            Get-Content prova/atualizacao-mesma.txt
+            if ($code -ne 10) { throw "a versão publicada devia dizer 'mais nova' (10), saiu $code" }
+          }

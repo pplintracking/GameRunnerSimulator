@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>GameRunnerSimulator</AssemblyName>
+    <RootNamespace>GameRunnerSimulator</RootNamespace>
+    <ApplicationIcon>assets\app.ico</ApplicationIcon>
+    <Product>GameRunner Simulator</Product>
+    <!-- 0.0.0 = build local/de teste: não se atualiza sozinho. O CI passa -p:Version=X.Y.Z na tag. -->
+    <Version>0.0.0</Version>
+
+    <!-- um .exe só, que roda sem instalar o .NET -->
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <SelfContained>true</SelfContained>
+    <PublishSingleFile>true</PublishSingleFile>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
+    <SatelliteResourceLanguages>pt-BR</SatelliteResourceLanguages>
+    <DebugType>none</DebugType>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="assets\logo.png" LogicalName="logo.png" />
+    <EmbeddedResource Include="assets\app.ico" LogicalName="app.ico" />
+  </ItemGroup>
+
+</Project>
