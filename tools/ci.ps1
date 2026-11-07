@@ -4,12 +4,17 @@ function Invoke-App([string]$exe, [string[]]$arguments, [int]$timeoutSec) {
     $psi = [System.Diagnostics.ProcessStartInfo]::new((Resolve-Path $exe).Path)
     foreach ($a in $arguments) { $psi.ArgumentList.Add($a) }
     $psi.UseShellExecute = $false
+    $psi.RedirectStandardError = $true
     $p = [System.Diagnostics.Process]::Start($psi)
+    $err = $p.StandardError.ReadToEndAsync()
     if (-not $p.WaitForExit($timeoutSec * 1000)) {
-        Show-Stuck $p
+        Show-Stuck $p | Out-Host
         $p.Kill($true)
+        $p.WaitForExit(5000) | Out-Null
+        if ($err.Wait(3000) -and $err.Result) { Write-Host "--- stderr:"; Write-Host $err.Result }
         throw "$exe passou de $timeoutSec s"
     }
+    if ($err.Wait(3000) -and $err.Result) { Write-Host "--- stderr:"; Write-Host $err.Result }
     return $p.ExitCode
 }
 
@@ -17,7 +22,7 @@ function Invoke-App([string]$exe, [string[]]$arguments, [int]$timeoutSec) {
 function Show-Stuck($p) {
     try {
         $p.Refresh()
-        "--- processo preso: pid $($p.Id), janela '$($p.MainWindowTitle)'"
+        "--- processo preso: pid $($p.Id), janela '$($p.MainWindowTitle)', CPU $($p.TotalProcessorTime), threads $($p.Threads.Count), memória $([int]($p.WorkingSet64/1MB)) MB, módulos $($p.Modules.Count)"
         Add-Type -AssemblyName UIAutomationClient, UIAutomationTypes
         $root = [System.Windows.Automation.AutomationElement]::RootElement
         $cond = [System.Windows.Automation.PropertyCondition]::new(
