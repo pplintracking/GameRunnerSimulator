@@ -11,8 +11,12 @@ Faz o Discord achar que um jogo está aberto no seu PC, para completar missões 
 ## Como usar
 
 1. Aceite a missão no Discord.
-2. Abra o `GameRunnerSimulator.exe`, busque o jogo da missão (pelo nome ou pelo `.exe`) e clique
-   na **estrela** ao lado dele. O jogo vai para o painel **Missões**.
+2. Monte o painel **Missões** de um dos dois jeitos:
+   - **À mão:** busque o jogo (pelo nome ou pelo `.exe`) e clique na **estrela** ao lado dele.
+   - **Trazendo do Discord:** clique em **Importar do Discord** e siga os 4 passos da janela
+     (copiar a resposta de `quests/@me` da aba Network e colar). O app marca sozinho as missões de
+     "jogue por X min" que existem na lista de jogos. Ele **não fala com o Discord**: só lê o texto
+     que você colou. Missão de vídeo, stream ou pré-compra ele não cumpre.
 3. Clique em **Cumprir** (ou em **Cumprir todas**, se marcou várias) e deixe o app aberto.
    Pode minimizar.
 
@@ -45,7 +49,16 @@ A lista do Discord traz, para cada jogo, o executável com a pasta onde ele fica
 Em `%LOCALAPPDATA%\GameRunnerSimulator\` ficam também a lista de jogos (`games.json`), as missões (`missoes.json`) e os ícones.
 Para desinstalar, apague o .exe e essa pasta.
 
-> Use por sua conta. Simular jogo para ganhar recompensa pode ir contra os Termos do Discord.
+## Para não tomar ban
+
+O app faz a coisa mais perto do legítimo que dá: abre um **processo de verdade** com o nome do
+`.exe` do jogo, que é exatamente o que o Discord procura para dizer "jogando X". Ele **não** usa o
+seu token, **não** injeta processo falso no cliente e **não** manda batida de missão pela rede —
+que é o tipo de automação que o Discord vem punindo. Para ficar no lado seguro: uma missão por vez
+(o app já faz), o tempo cheio de cada uma (já faz), e a sua própria conta, sem fazenda de contas.
+
+> Mesmo assim, use por sua conta: simular jogo para ganhar recompensa pode ir contra os Termos do
+> Discord, e não dá para medir a chance de ban.
 
 ## Para quem quer compilar
 

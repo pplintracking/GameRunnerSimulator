@@ -30,9 +30,26 @@ static class SelfTest
             var acento = Core.Catalog.Filter(c?.Games ?? r.Games, "pokémon");
             sb.AppendLine($"busca_pokemon_com_acento={acento.Count}");
             sb.AppendLine($"caminho={Simulator.SafeRelative("_retail_/wow.exe")} malicioso={Simulator.SafeRelative("../../x/..\\y.exe")}");
+
+            // controle positivo do importador: uma quests/@me plantada, com o id real do Overwatch.
+            // A de jogar (900 s = 15 min) tem de casar com o catálogo; a de vídeo NÃO pode entrar.
+            var sample = "{\"quests\":[" +
+                "{\"config\":{\"application\":{\"id\":\"" + OverwatchId + "\",\"name\":\"Overwatch\"}," +
+                "\"task_config\":{\"tasks\":{\"PLAY_ON_DESKTOP\":{\"target\":900}}}}}," +
+                "{\"config\":{\"application\":{\"id\":\"000\",\"name\":\"Video\"}," +
+                "\"task_config\":{\"tasks\":{\"WATCH_VIDEO\":{\"target\":60}}}}}" +
+                "]}";
+            var imp = QuestImport.Parse(sample);
+            var owQuest = imp.Play.FirstOrDefault(e => e.AppId == OverwatchId);
+            bool owMapeia = (c?.Games ?? r.Games).Any(g => g.Id == owQuest?.AppId);
+            sb.AppendLine($"import_total={imp.Total} play={imp.Play.Count} naoplay={imp.NonPlay} " +
+                          $"overwatch_min={owQuest?.Minutes} mapeia={owMapeia} erro={imp.Error}");
+            bool importOk = imp.Error is null && imp.Total == 2 && imp.Play.Count == 1 && imp.NonPlay == 1
+                            && owQuest?.Minutes == 15 && owMapeia;
+
             File.WriteAllText(outFile, sb.ToString());
             bool ok = r.Games.Count > 1000 && c?.Games.Count == r.Games.Count && ow is not null
-                      && busca.FirstOrDefault()?.Id == OverwatchId;
+                      && busca.FirstOrDefault()?.Id == OverwatchId && importOk;
             return ok ? 0 : 2;
         }
         catch (Exception ex)

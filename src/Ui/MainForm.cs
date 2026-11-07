@@ -17,6 +17,7 @@ sealed class MainForm : Form
     readonly DetailPanel detail;
     readonly MissionsView missionList;
     readonly FlatButton runAll = new() { Text = "Cumprir todas" };
+    readonly FlatButton importBtn = new() { Text = "Importar do Discord", Kind = ButtonKind.Secondary };
     readonly Missions missions;
     readonly System.Windows.Forms.Timer searchDelay = new() { Interval = 120 };
     readonly System.Windows.Forms.Timer tick = new() { Interval = 1000 };
@@ -67,7 +68,7 @@ sealed class MainForm : Form
         };
         detail = new DetailPanel(icons);
         missionList = new MissionsView(icons);
-        Controls.AddRange(new Control[] { search, gameList, detail, runAll, missionList });
+        Controls.AddRange(new Control[] { search, gameList, detail, runAll, importBtn, missionList });
 
         icons.Loaded += () => { gameList.Invalidate(); detail.Invalidate(); missionList.Invalidate(); };
         simulator.Changed += OnSimsChanged;
@@ -86,6 +87,7 @@ sealed class MainForm : Form
         missionList.RemoveClicked += it => { if (it.Mission is { } m) { Unqueue(m.GameId); missions.Remove(m); } };
         missionList.OpenRequested += it => Reveal(it.Game);
         runAll.Click += (_, _) => ToggleRunAll();
+        importBtn.Click += (_, _) => OpenImport();
         tick.Tick += (_, _) => OnTick();
         tick.Start();
         updateTimer.Tick += async (_, _) => await CheckUpdateAsync();
@@ -298,6 +300,42 @@ sealed class MainForm : Form
         else TryStart(it.Game);
     }
 
+    void OpenImport()
+    {
+        if (games.Count == 0)
+        {
+            MessageBox.Show(this, "Espera a lista de jogos do Discord terminar de carregar e tenta de novo.",
+                "GameRunner Simulator", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
+        using var dlg = new ImportDialog(ImportQuests);
+        dlg.ShowDialog(this);
+    }
+
+    /// <summary>Lê a lista colada do Discord e marca as missões de jogar que estão no catálogo.</summary>
+    (bool ok, string msg) ImportQuests(string text)
+    {
+        var r = QuestImport.Parse(text);
+        if (r.Error is not null) return (false, r.Error);
+
+        var mapped = r.Play.Where(e => gamesById.ContainsKey(e.AppId))
+                           .Select(e => (e.AppId, e.Minutes)).ToList();
+        int foraCatalogo = r.Play.Count - mapped.Count;
+        missions.MarkMany(mapped);  // dispara RefreshMissions
+
+        if (mapped.Count == 0)
+            return (false, r.NonPlay > 0 && r.Play.Count == 0
+                ? $"Li {r.Total} missão(ões), mas nenhuma é de \"jogar no PC\" (são de vídeo, stream ou pré-compra). Essas o app não cumpre."
+                : foraCatalogo > 0
+                    ? $"As {foraCatalogo} missão(ões) de jogo não estão na lista do Discord, então não dá para simular."
+                    : "Não achei missões de jogar no texto.");
+
+        var partes = new List<string> { $"{mapped.Count} missão(ões) de jogo marcada(s). Clique em Cumprir todas." };
+        if (foraCatalogo > 0) partes.Add($"{foraCatalogo} fora da lista de jogos (não dá para simular).");
+        if (r.NonPlay > 0) partes.Add($"{r.NonPlay} de vídeo/stream/pré-compra foram ignoradas.");
+        return (true, string.Join(" ", partes));
+    }
+
     void ToggleRunAll()
     {
         if (queue.Count > 0)
@@ -418,6 +456,7 @@ sealed class MainForm : Form
         detail.SetBounds(lw, 0, w - lw, detail.DesiredHeight);
         var mh = MissionsHeaderRect;
         runAll.SetBounds(mh.Right - S(150), mh.Y, S(150), S(34));
+        importBtn.SetBounds(runAll.Left - S(10) - S(168), mh.Y, S(168), S(34));
         int top = mh.Bottom + S(6);
         missionList.SetBounds(lw + S(32), top, w - lw - S(64) + S(10), Math.Max(S(70), h - fh - top - S(10)));
         Invalidate();
@@ -459,7 +498,7 @@ sealed class MainForm : Form
         var mh = MissionsHeaderRect;
         using (var pen = new Pen(Theme.Line, 1)) g.DrawLine(pen, mh.X, mh.Y - S(14), mh.Right, mh.Y - S(14));
         int total = missions.Items.Count, doneN = missions.Items.Count(m => m.Done is not null);
-        var textW = Math.Max(0, runAll.Left - mh.X - S(16));
+        var textW = Math.Max(0, importBtn.Left - mh.X - S(16));
         Theme.DrawText(g, "Missões", Theme.Heading, Theme.Text, new Rectangle(mh.X, mh.Y, textW, S(34)));
         int hw = Theme.Measure(g, "Missões", Theme.Heading).Width;
         string count = total == 0 ? "" : $"{doneN} de {total} cumpridas";
