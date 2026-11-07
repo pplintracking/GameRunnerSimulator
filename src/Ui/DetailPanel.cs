@@ -27,14 +27,14 @@ sealed class DetailPanel : Surface
     public Game? Game => game;
     public GameExe? SelectedExe => exes.SelectedItem;
 
-    const int Pad = 32, Top = 28, IconSize = 80, MaxRows = 3;
+    const int Pad = 32, TopY = 28, IconSize = 80, MaxRows = 3;
 
     int Rows => game is null ? 0 : Math.Min(game.Exes.Count, MaxRows);
 
     /// <summary>Altura que o painel pede à janela (o resto vai para as simulações ativas).</summary>
     public int DesiredHeight => game is null
         ? S(250)
-        : S(Top) + S(IconSize) + S(26) + S(22) + Rows * S(46) + S(8) + S(34);
+        : S(TopY) + S(IconSize) + S(26) + S(22) + Rows * S(46) + S(8) + S(34);
 
     public void SetGame(Game? g, bool isActive)
     {
@@ -66,14 +66,14 @@ sealed class DetailPanel : Surface
         Invalidate();
     }
 
-    Rectangle IconRect => new(S(Pad), S(Top), S(IconSize), S(IconSize));
-    int ExeLabelY => S(Top) + S(IconSize) + S(26);
+    Rectangle IconRect => new(S(Pad), S(TopY), S(IconSize), S(IconSize));
+    int ExeLabelY => S(TopY) + S(IconSize) + S(26);
 
     protected override void OnLayout(LayoutEventArgs e)
     {
         base.OnLayout(e);
         int bw = S(176), bh = S(44);
-        button.SetBounds(Width - S(Pad) - bw, S(Top) + (S(IconSize) - bh) / 2, bw, bh);
+        button.SetBounds(Width - S(Pad) - bw, S(TopY) + (S(IconSize) - bh) / 2, bw, bh);
         int listH = Rows * S(46) + S(8);
         exes.SetBounds(S(Pad) - S(1), ExeLabelY + S(20), Width - S(Pad) * 2 + S(10), listH);
     }
@@ -128,7 +128,7 @@ sealed class DetailPanel : Surface
 
     void PaintEmpty(Graphics g)
     {
-        int x = S(Pad), y = S(Top) + S(8), w = Width - S(Pad) * 2;
+        int x = S(Pad), y = S(TopY) + S(8), w = Width - S(Pad) * 2;
         Theme.DrawText(g, "Escolhe um jogo na lista", Theme.Heading, Theme.Text, new Rectangle(x, y, w, S(28)));
         y += S(44);
         string[] steps =

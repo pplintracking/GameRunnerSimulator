@@ -21,6 +21,8 @@
     <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
     <SatelliteResourceLanguages>pt-BR</SatelliteResourceLanguages>
     <DebugType>none</DebugType>
+    <!-- WFO1000 é do designer visual do WinForms, que este projeto não usa: os controles são desenhados no código -->
+    <NoWarn>$(NoWarn);WFO1000</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
