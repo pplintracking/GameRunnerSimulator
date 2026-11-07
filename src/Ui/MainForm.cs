@@ -15,7 +15,9 @@ sealed class MainForm : Form
     readonly SearchBox search = new();
     readonly GameListView gameList;
     readonly DetailPanel detail;
-    readonly ActiveSimsView activeList;
+    readonly MissionsView missionList;
+    readonly FlatButton runAll = new() { Text = "Cumprir todas" };
+    readonly Missions missions;
     readonly System.Windows.Forms.Timer searchDelay = new() { Interval = 120 };
     readonly System.Windows.Forms.Timer tick = new() { Interval = 1000 };
     readonly System.Windows.Forms.Timer updateTimer = new() { Interval = 6 * 60 * 60 * 1000 };
@@ -25,6 +27,10 @@ sealed class MainForm : Form
 
     List<Game> games = new();
     List<Game> filtered = new();
+    readonly Dictionary<string, Game> gamesById = new();
+    /// <summary>Fila do «Cumprir todas»: ids dos jogos; o primeiro é o que está rodando.</summary>
+    readonly List<string> queue = new();
+    bool advancing;
     CatalogResult? catalog;
     bool fetching, adopted, updating, restarting;
     UpdateInfo update = new() { State = AppInfo.IsDevBuild ? UpdateState.Disabled : UpdateState.Idle };
@@ -54,30 +60,38 @@ sealed class MainForm : Form
 
         icons = new IconCache(this);
         simulator = new Simulator();
-        gameList = new GameListView(icons, g => simulator.Find(g.Id) is not null)
+        missions = Missions.Load(persist: screenshotPath is null);
+        gameList = new GameListView(icons, g => simulator.Find(g.Id) is not null, g => missions.IsMarked(g.Id))
         {
             EmptyText = "Baixando a lista de jogos do Discord…"
         };
         detail = new DetailPanel(icons);
-        activeList = new ActiveSimsView(icons);
-        Controls.AddRange(new Control[] { search, gameList, detail, activeList });
+        missionList = new MissionsView(icons);
+        Controls.AddRange(new Control[] { search, gameList, detail, runAll, missionList });
 
-        icons.Loaded += () => { gameList.Invalidate(); detail.Invalidate(); activeList.Invalidate(); };
+        icons.Loaded += () => { gameList.Invalidate(); detail.Invalidate(); missionList.Invalidate(); };
         simulator.Changed += OnSimsChanged;
+        missions.Changed += RefreshMissions;
         search.QueryChanged += (_, _) => { searchDelay.Stop(); searchDelay.Start(); };
         search.BoxKeyDown += OnSearchKey;
         searchDelay.Tick += (_, _) => { searchDelay.Stop(); ApplyFilter(resetScroll: true); };
         gameList.SelectionChanged += (_, _) => ShowSelected();
         gameList.ItemActivated += (_, _) => ToggleSelected();
         gameList.TypeAhead += c => search.Append(c);
+        gameList.StarClicked += ToggleMission;
         detail.SimulateClicked += (_, _) => ToggleSelected();
-        activeList.StopRequested += sim => simulator.Stop(sim);
-        activeList.OpenRequested += Reveal;
-        tick.Tick += (_, _) => { if (activeList.Count > 0) activeList.Invalidate(); };
+        detail.MarkClicked += (_, _) => { if (detail.Game is { } g) ToggleMission(g); };
+        missionList.ActionClicked += OnMissionAction;
+        missionList.MinutesClicked += it => { if (it.Mission is { } m) missions.CycleMinutes(m); };
+        missionList.RemoveClicked += it => { if (it.Mission is { } m) { Unqueue(m.GameId); missions.Remove(m); } };
+        missionList.OpenRequested += it => Reveal(it.Game);
+        runAll.Click += (_, _) => ToggleRunAll();
+        tick.Tick += (_, _) => OnTick();
         tick.Start();
         updateTimer.Tick += async (_, _) => await CheckUpdateAsync();
 
         ready = true;
+        RefreshMissions();
         DoLayout();
     }
 
@@ -113,11 +127,14 @@ sealed class MainForm : Form
             int n = simulator.Active.Count;
             var r = MessageBox.Show(this,
                 (n == 1 ? "Tem 1 simulação rodando." : $"Tem {n} simulações rodando.") +
-                "\n\nSim: parar e fechar.\nNão: fechar e deixar rodando.",
+                (queue.Count > 0 ? " A fila do «Cumprir todas» para aqui." : "") +
+                "\n\nSim: parar e fechar.\nNão: fechar e deixar rodando (aí ela não para sozinha no fim do tempo).",
                 "GameRunner Simulator", MessageBoxButtons.YesNoCancel, MessageBoxIcon.Question);
             if (r == DialogResult.Cancel) { e.Cancel = true; return; }
+            queue.Clear();
             if (r == DialogResult.Yes) simulator.StopAll();
         }
+        queue.Clear();
         closing.Cancel();
         base.OnFormClosing(e);
     }
@@ -160,6 +177,8 @@ sealed class MainForm : Form
         var selId = gameList.SelectedItem?.Id ?? detail.Game?.Id;
         catalog = r;
         games = r.Games;
+        gamesById.Clear();
+        foreach (var g in games) gamesById.TryAdd(g.Id, g);
         ApplyFilter(resetScroll: false);
         if (selId is not null && filtered.FirstOrDefault(g => g.Id == selId) is { } again) gameList.Select(again);
         gameList.EmptyText = "Nenhum jogo com esse nome.";
@@ -168,6 +187,7 @@ sealed class MainForm : Form
             adopted = true;
             try { simulator.Adopt(games); } catch { }
         }
+        RefreshMissions();
         Invalidate();
     }
 
@@ -181,20 +201,20 @@ sealed class MainForm : Form
     void ShowSelected()
     {
         if (gameList.SelectedItem is not { } g) return;
-        detail.SetGame(g, simulator.Find(g.Id) is not null);
+        detail.SetGame(g, simulator.Find(g.Id) is not null, missions.Find(g.Id));
         DoLayout();
     }
 
-    void Reveal(Simulation sim)
+    void Reveal(Game game)
     {
-        if (filtered.FirstOrDefault(g => g.Id == sim.Game.Id) is not { } g)
+        if (filtered.FirstOrDefault(g => g.Id == game.Id) is not { } g)
         {
             search.Query = "";
             ApplyFilter(resetScroll: false);
-            g = filtered.FirstOrDefault(x => x.Id == sim.Game.Id);
+            g = filtered.FirstOrDefault(x => x.Id == game.Id);
         }
         if (g is not null) gameList.Select(g);
-        else { detail.SetGame(sim.Game, true); DoLayout(); }
+        else { detail.SetGame(game, simulator.Find(game.Id) is not null, missions.Find(game.Id)); DoLayout(); }
     }
 
     void OnSearchKey(object? sender, KeyEventArgs e)
@@ -210,6 +230,7 @@ sealed class MainForm : Form
     protected override void OnKeyDown(KeyEventArgs e)
     {
         if (e.Control && e.KeyCode == Keys.F) { search.FocusBox(); e.SuppressKeyPress = true; }
+        else if (e.Control && e.KeyCode == Keys.M && (detail.Game ?? gameList.SelectedItem) is { } g) { ToggleMission(g); e.SuppressKeyPress = true; }
         base.OnKeyDown(e);
     }
 
@@ -220,21 +241,147 @@ sealed class MainForm : Form
         var g = detail.Game ?? gameList.SelectedItem;
         if (g is null) return;
         if (simulator.Find(g.Id) is { } running) { simulator.Stop(running); return; }
-        var exe = detail.Game?.Id == g.Id ? detail.SelectedExe ?? g.MainExe : g.MainExe;
-        try { simulator.Start(g, exe); }
+        TryStart(g);
+    }
+
+    GameExe ExeFor(Game g) => detail.Game?.Id == g.Id ? detail.SelectedExe ?? g.MainExe : g.MainExe;
+
+    /// <summary>Abre a simulação. Se o jogo é missão já cumprida, zera para contar de novo.</summary>
+    bool TryStart(Game g)
+    {
+        if (missions.Find(g.Id) is { } m) missions.Reset(m);
+        try { simulator.Start(g, ExeFor(g)); return true; }
         catch (Exception ex)
         {
-            MessageBox.Show(this, "Não deu para iniciar a simulação.\n\n" + ex.Message,
+            MessageBox.Show(this, $"Não deu para iniciar a simulação de {g.Name}.\n\n" + ex.Message,
                 "GameRunner Simulator", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            return false;
         }
     }
 
     void OnSimsChanged()
     {
-        activeList.SetItems(simulator.Active.ToList(), resetScroll: false);
-        if (detail.Game is { } g) detail.SetActive(simulator.Find(g.Id) is not null);
+        // o primeiro da fila parou antes do tempo (fechou a janelinha ou clicou Parar): passa para o próximo
+        if (!advancing && queue.Count > 0 && simulator.Find(queue[0]) is null)
+        {
+            queue.RemoveAt(0);
+            StartNextInQueue();
+        }
+        RefreshMissions();
         gameList.Invalidate();
-        Invalidate(ActiveHeaderRect);
+    }
+
+    void ToggleMission(Game g)
+    {
+        if (missions.Find(g.Id) is { } m)
+        {
+            Unqueue(g.Id);
+            missions.Remove(m);
+        }
+        else
+        {
+            missions.Mark(g.Id);
+            if (queue.Count > 0) { queue.Add(g.Id); RefreshMissions(); }
+        }
+    }
+
+    void Unqueue(string id)
+    {
+        bool head = queue.Count > 0 && queue[0] == id;
+        queue.Remove(id);
+        if (head) StartNextInQueue();
+    }
+
+    void OnMissionAction(MissionItem it)
+    {
+        if (it.Sim is { } sim) simulator.Stop(sim);
+        else TryStart(it.Game);
+    }
+
+    void ToggleRunAll()
+    {
+        if (queue.Count > 0)
+        {
+            var head = queue[0];
+            queue.Clear();
+            if (simulator.Find(head) is { } s) simulator.Stop(s);
+            RefreshMissions();
+            return;
+        }
+        // as que já estão rodando vêm primeiro: a fila espera elas terminarem
+        queue.AddRange(missions.Items
+            .Where(m => m.Done is null && gamesById.ContainsKey(m.GameId))
+            .OrderBy(m => simulator.Find(m.GameId) is null ? 1 : 0)
+            .Select(m => m.GameId));
+        StartNextInQueue();
+    }
+
+    void StartNextInQueue()
+    {
+        if (advancing) return;
+        advancing = true;
+        try
+        {
+            while (queue.Count > 0)
+            {
+                var id = queue[0];
+                if (missions.Find(id) is not { Done: null } || !gamesById.TryGetValue(id, out var g)) { queue.RemoveAt(0); continue; }
+                if (simulator.Find(id) is not null) return;
+                if (TryStart(g) && simulator.Find(id) is not null) return;
+                queue.RemoveAt(0);
+            }
+        }
+        finally
+        {
+            advancing = false;
+            RefreshMissions();
+        }
+    }
+
+    /// <summary>A cada segundo: atualiza os relógios e para a missão que já rodou o tempo dela.</summary>
+    void OnTick()
+    {
+        bool finished = false;
+        foreach (var s in simulator.Active.ToList())
+        {
+            if (missions.Find(s.Game.Id) is { Done: null } m && s.Elapsed >= m.Target)
+            {
+                missions.MarkDone(m);
+                queue.Remove(s.Game.Id);
+                simulator.Stop(s);
+                finished = true;
+            }
+        }
+        if (finished) StartNextInQueue();
+        if (simulator.Active.Count > 0) missionList.Invalidate();
+    }
+
+    void RefreshMissions()
+    {
+        if (!ready) return;
+        var open = new List<MissionItem>();
+        var loose = new List<MissionItem>();
+        var done = new List<MissionItem>();
+        foreach (var m in missions.Items)
+        {
+            var sim = simulator.Find(m.GameId);
+            var g = sim?.Game ?? (gamesById.TryGetValue(m.GameId, out var x) ? x : null);
+            if (g is null) continue;
+            var it = new MissionItem { Game = g, Mission = m, Sim = sim, Queued = sim is null && queue.Contains(m.GameId) };
+            (m.Done is not null && sim is null ? done : open).Add(it);
+        }
+        foreach (var s in simulator.Active)
+            if (!missions.IsMarked(s.Game.Id)) loose.Add(new MissionItem { Game = s.Game, Sim = s });
+        missionList.SetItems(open.Concat(loose).Concat(done).ToList(), resetScroll: false);
+
+        int pending = missions.Items.Count(m => m.Done is null && gamesById.ContainsKey(m.GameId));
+        runAll.Text = queue.Count > 0 ? "Parar fila" : "Cumprir todas";
+        runAll.Kind = queue.Count > 0 ? ButtonKind.Danger : ButtonKind.Primary;
+        runAll.Enabled = queue.Count > 0 || pending > 0;
+
+        if (detail.Game is { } dg) detail.SetState(simulator.Find(dg.Id) is not null, missions.Find(dg.Id));
+        gameList.Invalidate();
+        Invalidate(MissionsHeaderRect);
     }
 
     // ---------------- atualização automática ----------------
@@ -260,7 +407,7 @@ sealed class MainForm : Form
     // ---------------- layout e desenho ----------------
 
     Rectangle FooterRect => new(0, ClientSize.Height - FooterH, ClientSize.Width, FooterH);
-    Rectangle ActiveHeaderRect => new(LeftW + S(32), detail.Bottom + S(30), ClientSize.Width - LeftW - S(64), S(16));
+    Rectangle MissionsHeaderRect => new(LeftW + S(32), detail.Bottom + S(26), ClientSize.Width - LeftW - S(64), S(56));
 
     void DoLayout()
     {
@@ -269,9 +416,10 @@ sealed class MainForm : Form
         search.SetBounds(S(16), S(66), lw - S(32), S(40));
         gameList.SetBounds(0, S(ListTop), lw, h - fh - S(ListTop) - S(6));
         detail.SetBounds(lw, 0, w - lw, detail.DesiredHeight);
-        var ah = ActiveHeaderRect;
-        int top = ah.Bottom + S(8);
-        activeList.SetBounds(lw + S(32), top, w - lw - S(64) + S(10), Math.Max(S(64), h - fh - top - S(12)));
+        var mh = MissionsHeaderRect;
+        runAll.SetBounds(mh.Right - S(150), mh.Y, S(150), S(34));
+        int top = mh.Bottom + S(6);
+        missionList.SetBounds(lw + S(32), top, w - lw - S(64) + S(10), Math.Max(S(70), h - fh - top - S(10)));
         Invalidate();
     }
 
@@ -307,10 +455,21 @@ sealed class MainForm : Form
             Theme.DrawText(g, label, Theme.Label, Theme.Faint, new Rectangle(S(20), S(120), lw - S(40), S(18)));
         }
 
-        // cabeçalho das simulações ativas
-        var ah = ActiveHeaderRect;
-        using (var pen = new Pen(Theme.Line, 1)) g.DrawLine(pen, ah.X, ah.Y - S(16), ah.Right, ah.Y - S(16));
-        Theme.DrawText(g, $"SIMULAÇÕES ATIVAS · {simulator.Active.Count}", Theme.Label, Theme.Faint, ah);
+        // cabeçalho das missões
+        var mh = MissionsHeaderRect;
+        using (var pen = new Pen(Theme.Line, 1)) g.DrawLine(pen, mh.X, mh.Y - S(14), mh.Right, mh.Y - S(14));
+        int total = missions.Items.Count, doneN = missions.Items.Count(m => m.Done is not null);
+        var textW = Math.Max(0, runAll.Left - mh.X - S(16));
+        Theme.DrawText(g, "Missões", Theme.Heading, Theme.Text, new Rectangle(mh.X, mh.Y, textW, S(34)));
+        int hw = Theme.Measure(g, "Missões", Theme.Heading).Width;
+        string count = total == 0 ? "" : $"{doneN} de {total} cumpridas";
+        if (count.Length > 0)
+            Theme.DrawText(g, count, Theme.Body, doneN == total ? Theme.Green : Theme.Muted,
+                new Rectangle(mh.X + hw + S(10), mh.Y + S(1), Math.Max(0, textW - hw - S(10)), S(34)));
+        string hint = queue.Count > 0
+            ? $"Cumprindo uma por vez · {queue.Count} na fila. Pode minimizar o app, só não feche."
+            : "Aceita a missão no Discord antes. Cada uma roda o tempo marcado + 1 min de folga e para sozinha.";
+        Theme.DrawText(g, hint, Theme.Small, Theme.Faint, new Rectangle(mh.X, mh.Y + S(38), mh.Width, S(18)));
 
         PaintFooter(g);
     }
@@ -422,15 +581,18 @@ sealed class MainForm : Form
     {
         try
         {
+            // o print mostra o fluxo inteiro: uma missão rodando, uma na fila e uma cumprida
             var first = games.FirstOrDefault(g => g.Id == OverwatchId) ?? games.FirstOrDefault();
             var second = games.FirstOrDefault(g => g.Name.Equals("Marvel Rivals", StringComparison.OrdinalIgnoreCase))
                          ?? games.FirstOrDefault(g => g.Icon is not null && g != first);
-            if (second is not null) simulator.Start(second, second.MainExe);
-            if (first is not null)
-            {
-                gameList.Select(first);
-                simulator.Start(first, first.MainExe);
-            }
+            var third = new[] { "Genshin Impact", "Fortnite", "VALORANT", "Rocket League" }
+                            .Select(n => games.FirstOrDefault(g => g.Name.Equals(n, StringComparison.OrdinalIgnoreCase) && g.Icon is not null))
+                            .FirstOrDefault(g => g is not null && g != first && g != second)
+                        ?? games.FirstOrDefault(g => g.Icon is not null && g != first && g != second);
+            foreach (var g in new[] { first, second, third }) if (g is not null) missions.Mark(g.Id);
+            if (third is not null && missions.Find(third.Id) is { } m3) missions.MarkDone(m3);
+            if (first is not null) gameList.Select(first);
+            ToggleRunAll();
             await Task.Delay(7000);
 
             using var full = new Bitmap(Width, Height);
@@ -451,6 +613,7 @@ sealed class MainForm : Form
         }
         finally
         {
+            queue.Clear();
             simulator.StopAll();
             await Task.Delay(2000);
             Close();

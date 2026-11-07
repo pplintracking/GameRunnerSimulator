@@ -8,20 +8,23 @@ Faz o Discord achar que um jogo está aberto no seu PC, para completar missões 
 **[GameRunnerSimulator.exe](https://github.com/pplintracking/GameRunnerSimulator/releases/latest/download/GameRunnerSimulator.exe)**
 — um arquivo só, para Windows 10/11 64 bits. Não precisa instalar nada, nem o .NET.
 
-Na primeira vez o Windows pode mostrar "O Windows protegeu o computador" (o .exe não tem assinatura
-paga). Clique em **Mais informações → Executar assim mesmo**.
-
 ## Como usar
 
-1. Abra o `GameRunnerSimulator.exe` e busque o jogo da missão, pelo nome ou pelo `.exe`.
-2. Clique em **Simular** (ou dê Enter). Abre uma janelinha com o nome e o ícone do jogo.
-3. Deixe essa janelinha aberta (pode minimizar) até a missão completar no Discord.
+1. Aceite a missão no Discord.
+2. Abra o `GameRunnerSimulator.exe`, busque o jogo da missão (pelo nome ou pelo `.exe`) e clique
+   na **estrela** ao lado dele. O jogo vai para o painel **Missões**.
+3. Clique em **Cumprir** (ou em **Cumprir todas**, se marcou várias) e deixe o app aberto.
+   Pode minimizar.
 
-O app já escolhe o executável certo; se o jogo tiver mais de um, dá para trocar antes de simular.
-Dá para simular vários jogos ao mesmo tempo, e o painel "Simulações ativas" mostra o tempo de
-cada um com o botão **Parar**.
+Cada missão roda o tempo marcado (15 min; clique no tempo para trocar para 30, 45 ou 60) mais
+1 minuto de folga, com barra de progresso, e para sozinha quando termina. **Cumprir todas** roda
+uma depois da outra. As missões ficam salvas: na próxima vez que abrir, a lista está lá, com as
+já cumpridas marcadas em verde.
 
-Atalhos: `Ctrl+F` busca · `↑` `↓` navegam · `Enter` simula · `Esc` limpa a busca.
+Para só abrir um jogo sem missão, escolha na lista e clique em **Simular** (ou dê Enter). O app já
+escolhe o executável certo; se o jogo tiver mais de um, dá para trocar antes.
+
+Atalhos: `Ctrl+F` busca · `↑` `↓` navegam · `Enter` simula · `Ctrl+M` marca missão · `Esc` limpa a busca.
 
 ## Atualiza sozinho
 
@@ -39,7 +42,7 @@ A lista do Discord traz, para cada jogo, o executável com a pasta onde ele fica
 `%LOCALAPPDATA%\GameRunnerSimulator\sims\` e abre esse processo. Quando a simulação para, a pasta
 é apagada; se algo ficar para trás, o app limpa na próxima vez que abrir.
 
-Em `%LOCALAPPDATA%\GameRunnerSimulator\` ficam também a lista de jogos (`games.json`) e os ícones.
+Em `%LOCALAPPDATA%\GameRunnerSimulator\` ficam também a lista de jogos (`games.json`), as missões (`missoes.json`) e os ícones.
 Para desinstalar, apague o .exe e essa pasta.
 
 > Use por sua conta. Simular jogo para ganhar recompensa pode ir contra os Termos do Discord.

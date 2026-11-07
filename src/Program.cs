@@ -60,9 +60,10 @@ sealed class CliArgs
         var a = new CliArgs();
         for (int i = 0; i < argv.Length; i++)
         {
-            if (!argv[i].StartsWith("--")) continue;
+            var key = argv[i];
+            if (!key.StartsWith("--")) continue;
             string? value = i + 1 < argv.Length && !argv[i + 1].StartsWith("--") ? argv[++i] : null;
-            a.map[argv[i]] = value;
+            a.map[key] = value;
         }
         return a;
     }

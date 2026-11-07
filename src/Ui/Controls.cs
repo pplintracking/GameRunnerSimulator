@@ -66,6 +66,57 @@ sealed class FlatButton : Surface
     }
 }
 
+/// <summary>Botão quadrado com estrela: marca o jogo como missão.</summary>
+sealed class StarButton : Surface
+{
+    bool hover, isChecked;
+    readonly ToolTip tip = new() { InitialDelay = 300 };
+
+    public StarButton()
+    {
+        Cursor = Cursors.Hand;
+        TabStop = true;
+        UpdateTip();
+    }
+
+    public bool Checked { get => isChecked; set { if (isChecked == value) return; isChecked = value; UpdateTip(); Invalidate(); } }
+
+    void UpdateTip() => tip.SetToolTip(this, isChecked ? "Tirar das missões" : "Marcar como missão");
+
+    protected override void OnMouseEnter(EventArgs e) { hover = true; Invalidate(); base.OnMouseEnter(e); }
+    protected override void OnMouseLeave(EventArgs e) { hover = false; Invalidate(); base.OnMouseLeave(e); }
+    protected override void OnGotFocus(EventArgs e) { Invalidate(); base.OnGotFocus(e); }
+    protected override void OnLostFocus(EventArgs e) { Invalidate(); base.OnLostFocus(e); }
+    protected override bool IsInputKey(Keys keyData) => keyData is Keys.Enter or Keys.Space || base.IsInputKey(keyData);
+
+    protected override void OnKeyDown(KeyEventArgs e)
+    {
+        if (e.KeyCode is Keys.Enter or Keys.Space) { OnClick(EventArgs.Empty); e.Handled = true; }
+        base.OnKeyDown(e);
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing) tip.Dispose();
+        base.Dispose(disposing);
+    }
+
+    protected override void OnPaint(PaintEventArgs e)
+    {
+        var g = e.Graphics;
+        g.Clear(Parent?.BackColor ?? Theme.Bg2);
+        Theme.HighQuality(g);
+        var r = new RectangleF(0, 0, Width - 1, Height - 1);
+        Theme.FillRound(g, hover ? Theme.HoverOnBg2 : Theme.Bg3, r, Sf(8));
+        if (isChecked) Theme.StrokeRound(g, Color.FromArgb(150, Theme.Gold), RectangleF.Inflate(r, -Sf(0.5f), -Sf(0.5f)), Sf(8), Sf(1.2f));
+        if (Focused && ShowFocusCues) Theme.StrokeRound(g, Color.FromArgb(160, Color.White), RectangleF.Inflate(r, -Sf(2), -Sf(2)), Sf(6), Sf(1.5f));
+        float s = Math.Min(Width, Height) * 0.46f;
+        var star = new RectangleF((Width - s) / 2f, (Height - s) / 2f, s, s);
+        if (isChecked) Theme.DrawStar(g, star, true, Theme.Gold, 0);
+        else Theme.DrawStar(g, star, false, hover ? Theme.Gold : Theme.Muted, Sf(1.6f));
+    }
+}
+
 /// <summary>Campo de busca arredondado com lupa desenhada e botão de limpar.</summary>
 sealed class SearchBox : Surface
 {

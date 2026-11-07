@@ -22,6 +22,8 @@ abstract class VirtualList<T> : Surface where T : class
     protected abstract void DrawRow(Graphics g, T item, Rectangle r, bool isSelected, bool isHover);
     protected virtual void OnRowClick(int index, Point p) { }
     protected virtual Cursor RowCursor(int index, Point p) => Cursors.Default;
+    /// <summary>Clique caiu num botão desenhado dentro da linha (não abre o item no duplo clique).</summary>
+    protected virtual bool IsControlHit(int index, Point p) => false;
 
     protected int RowH => S(RowHeightLogical);
     protected int PadTop => S(4);
@@ -212,7 +214,8 @@ abstract class VirtualList<T> : Surface where T : class
 
     protected override void OnMouseDoubleClick(MouseEventArgs e)
     {
-        if (e.Button == MouseButtons.Left && IndexAt(e.Location) >= 0) ItemActivated?.Invoke(this, EventArgs.Empty);
+        int i = IndexAt(e.Location);
+        if (e.Button == MouseButtons.Left && i >= 0 && !IsControlHit(i, e.Location)) ItemActivated?.Invoke(this, EventArgs.Empty);
         base.OnMouseDoubleClick(e);
     }
 

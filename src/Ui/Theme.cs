@@ -24,6 +24,7 @@ static class Theme
     public static readonly Color Green = C(0x23A55A);
     public static readonly Color Red = C(0xDA373C);
     public static readonly Color RedHover = C(0xA12828);
+    public static readonly Color Gold = C(0xF0B232);      // estrela de missão
 
     public static readonly Font Body = new("Segoe UI", 10f);
     public static readonly Font BodySemibold = new("Segoe UI Semibold", 10f);
@@ -106,6 +107,22 @@ static class Theme
     {
         if (img is not null) DrawRoundedImage(g, img, r, radius);
         else DrawPlaceholder(g, id, name, r, radius);
+    }
+
+    /// <summary>Estrela de 5 pontas: cheia (missão marcada) ou só o contorno.</summary>
+    public static void DrawStar(Graphics g, RectangleF r, bool filled, Color c, float stroke)
+    {
+        var pts = new PointF[10];
+        float cx = r.X + r.Width / 2, cy = r.Y + r.Height / 2 + r.Height * 0.04f;
+        float outer = Math.Min(r.Width, r.Height) / 2, inner = outer * 0.48f;
+        for (int i = 0; i < 10; i++)
+        {
+            double a = -Math.PI / 2 + i * Math.PI / 5;
+            float rad = i % 2 == 0 ? outer : inner;
+            pts[i] = new PointF(cx + (float)(Math.Cos(a) * rad), cy + (float)(Math.Sin(a) * rad));
+        }
+        if (filled) { using var b = new SolidBrush(c); g.FillPolygon(b, pts); }
+        else { using var p = new Pen(c, stroke) { LineJoin = System.Drawing.Drawing2D.LineJoin.Round }; g.DrawPolygon(p, pts); }
     }
 
     public const TextFormatFlags Line1 = TextFormatFlags.Left | TextFormatFlags.VerticalCenter |
