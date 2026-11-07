@@ -42,6 +42,14 @@ jobs:
           $exe = Get-Item out/GameRunnerSimulator.exe
           "{0:N1} MB" -f ($exe.Length / 1MB) | Tee-Object prova/tamanho.txt
 
+      - name: Autoteste — versão gravada no .exe
+        run: |
+          . ./tools/ci.ps1
+          $code = Invoke-App out/GameRunnerSimulator.exe @('--version-file', "$PWD/prova/versao.txt") 60
+          $got = Get-Content prova/versao.txt
+          "versão no .exe: $got"
+          if ($code -ne 0 -or $got -ne '${{ steps.ver.outputs.version }}') { throw "versão errada: $got" }
+
       - name: Sonda — o runner alcança a API do Discord?
         run: |
           curl.exe -s -o NUL --compressed -m 60 -A "GameRunnerSimulator/0.0.0" -w "discord: %{http_code} %{size_download}B %{time_total}s`n" https://discord.com/api/v9/applications/detectable
@@ -52,14 +60,6 @@ jobs:
           try { $code = Invoke-App out/GameRunnerSimulator.exe @('--selftest-catalog', "$PWD/prova/catalogo.txt") 150 }
           finally { Get-Content prova/catalogo.txt -ErrorAction SilentlyContinue }
           if ($code -ne 0) { throw "autoteste do catálogo saiu $code" }
-
-      - name: Autoteste — versão gravada no .exe
-        run: |
-          . ./tools/ci.ps1
-          $code = Invoke-App out/GameRunnerSimulator.exe @('--version-file', "$PWD/prova/versao.txt") 30
-          $got = Get-Content prova/versao.txt
-          "versão no .exe: $got"
-          if ($code -ne 0 -or $got -ne '${{ steps.ver.outputs.version }}') { throw "versão errada: $got" }
 
       - name: Prints da janela e da simulação
         run: |
